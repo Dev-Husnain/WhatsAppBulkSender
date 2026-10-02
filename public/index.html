@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsApp Bulk Sender</title>
+<meta name="description" content="Send a message to many WhatsApp numbers at once, from your own computer.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='9' fill='%2325D366'/><path d='M9 16.5l4.5 4.5L23 11.5' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f3f6f4;
+    --bg-accent: radial-gradient(1200px 500px at 0% -10%, #d9f7e5 0%, transparent 60%), radial-gradient(900px 400px at 110% 0%, #e3f1ff 0%, transparent 55%);
+    --card: #ffffff;
+    --text: #13201a;
+    --muted: #5f6f67;
+    --border: #e2e8e4;
+    --input: #f8faf9;
+    --brand: #1fae5b;
+    --brand-strong: #128c4a;
+    --brand-soft: #e5f8ed;
+    --danger: #d64545;
+    --danger-soft: #fdecec;
+    --warn: #b7791f;
+    --warn-soft: #fdf4e3;
+    --shadow: 0 1px 2px rgba(16, 40, 28, .04), 0 8px 24px rgba(16, 40, 28, .06);
+    --radius: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1411;
+      --bg-accent: radial-gradient(1200px 500px at 0% -10%, #12301f 0%, transparent 60%), radial-gradient(900px 400px at 110% 0%, #13233a 0%, transparent 55%);
+      --card: #141d19;
+      --text: #e6efe9;
+      --muted: #93a39a;
+      --border: #24312b;
+      --input: #0f1714;
+      --brand: #2fd071;
+      --brand-strong: #25b862;
+      --brand-soft: #173726;
+      --danger: #f07070;
+      --danger-soft: #3a1c1c;
+      --warn: #e0a84a;
+      --warn-soft: #3a2d15;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1411;
+    --bg-accent: radial-gradient(1200px 500px at 0% -10%, #12301f 0%, transparent 60%), radial-gradient(900px 400px at 110% 0%, #13233a 0%, transparent 55%);
+    --card: #141d19;
+    --text: #e6efe9;
+    --muted: #93a39a;
+    --border: #24312b;
+    --input: #0f1714;
+    --brand: #2fd071;
+    --brand-strong: #25b862;
+    --brand-soft: #173726;
+    --danger: #f07070;
+    --danger-soft: #3a1c1c;
+    --warn: #e0a84a;
+    --warn-soft: #3a2d15;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg-accent), var(--bg);
+    background-attachment: fixed;
+    color: var(--text);
+    font: 15px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 16px 64px; }
+
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+  .logo {
+    width: 42px; height: 42px; border-radius: 12px; flex: none;
+    background: linear-gradient(135deg, #2fd071, #128c4a);
+    display: grid; place-items: center; box-shadow: 0 6px 16px rgba(31, 174, 91, .35);
+  }
+  .logo svg { width: 24px; height: 24px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+  .subtitle { color: var(--muted); font-size: 13px; margin: 0; }
+  .spacer { flex: 1; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+    padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 500;
+    background: var(--card); border: 1px solid var(--border);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill.ok .dot { background: var(--brand); box-shadow: 0 0 0 4px var(--brand-soft); }
+  .pill.wait .dot { background: var(--warn); animation: pulse 1.4s infinite; }
+  .pill.bad .dot { background: var(--danger); }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 22px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 16px; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
+  .step {
+    width: 24px; height: 24px; border-radius: 50%; flex: none; font-size: 12px; font-weight: 700;
+    display: grid; place-items: center; background: var(--brand-soft); color: var(--brand-strong);
+  }
+  .hint { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+  .hint code, .box code {
+    background: var(--input); border: 1px solid var(--border); border-radius: 6px;
+    padding: 1px 6px; font-size: 12.5px;
+  }
+
+  textarea, input[type="text"] {
+    width: 100%; font: inherit; color: var(--text); background: var(--input);
+    border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; outline: none;
+    transition: border-color .15s, box-shadow .15s; resize: vertical;
+  }
+  textarea:focus, input[type="text"]:focus { border-color: var(--brand); box-shadow: 0 0 0 4px var(--brand-soft); }
+
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .between { justify-content: space-between; }
+  .mt { margin-top: 12px; }
+
+  button, .btn {
+    font: inherit; font-weight: 600; cursor: pointer; border-radius: 12px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); padding: 9px 14px; display: inline-flex; align-items: center; gap: 8px;
+    transition: transform .05s, background .15s, opacity .15s;
+  }
+  button:hover, .btn:hover { background: var(--input); }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .primary { background: var(--brand); border-color: var(--brand); color: #fff; padding: 13px 20px; font-size: 15px; }
+  .primary:hover { background: var(--brand-strong); }
+  .danger { color: var(--danger); }
+  .link { border: none; background: none; padding: 0; color: var(--brand-strong); font-weight: 500; }
+  .link:hover { background: none; text-decoration: underline; }
+  .grow { flex: 1; justify-content: center; }
+
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 12.5px; padding: 3px 10px; border-radius: 999px; background: var(--input); border: 1px solid var(--border); color: var(--muted); }
+  .chip.ok { background: var(--brand-soft); color: var(--brand-strong); border-color: transparent; }
+  .chip.bad { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+
+  .seg { display: inline-flex; background: var(--input); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+  .seg button { border: none; background: none; padding: 8px 14px; border-radius: 9px; color: var(--muted); font-weight: 500; }
+  .seg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.08); font-weight: 600; }
+
+  .each-list { display: grid; gap: 12px; max-height: 460px; overflow: auto; padding-right: 4px; }
+  .each-item label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .each-item label span { color: var(--muted); font-weight: 400; }
+
+  .box { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+  .qr { background: #fff; border-radius: 14px; padding: 10px; border: 1px solid var(--border); width: 220px; height: 220px; display: grid; place-items: center; flex: none; }
+  .qr img { width: 100%; height: 100%; }
+  ol.steps { margin: 0; padding-left: 20px; color: var(--muted); }
+  ol.steps li { margin: 4px 0; }
+  ol.steps b { color: var(--text); }
+
+  .bar { height: 10px; border-radius: 999px; background: var(--input); border: 1px solid var(--border); overflow: hidden; margin: 14px 0 10px; }
+  .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, #2fd071, #128c4a); transition: width .4s; }
+  .log { list-style: none; margin: 12px 0 0; padding: 0; max-height: 320px; overflow: auto; border-top: 1px solid var(--border); }
+  .log li { display: flex; gap: 10px; align-items: center; padding: 9px 2px; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .log .num { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .log .err { color: var(--muted); font-size: 12.5px; margin-left: auto; text-align: right; overflow-wrap: anywhere; }
+  .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+  .badge.sent { background: var(--brand-soft); color: var(--brand-strong); }
+  .badge.failed, .badge.invalid { background: var(--danger-soft); color: var(--danger); }
+  .badge.not_on_whatsapp { background: var(--warn-soft); color: var(--warn); }
+
+  .sender { margin-bottom: 16px; }
+  .sender > label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .sender > label span, .check { color: var(--muted); font-weight: 400; }
+  .check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+  .check input { width: 17px; height: 17px; accent-color: var(--brand); }
+  .preview {
+    margin-top: 14px; padding: 12px 14px; border-radius: 12px 12px 12px 4px; max-width: 420px;
+    background: var(--brand-soft); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px;
+  }
+  .preview-label { font-size: 12px; color: var(--muted); margin: 14px 0 0; }
+  .notice { font-size: 13px; color: var(--muted); background: var(--warn-soft); border-radius: 12px; padding: 10px 14px; margin-top: 14px; }
+  .notice b { color: var(--warn); }
+  .hidden { display: none !important; }
+  footer { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 28px; }
+
+  @media (max-width: 560px) {
+    .wrap { padding-top: 18px; }
+    .card { padding: 18px; }
+    header { flex-wrap: wrap; }
+    .qr { width: 100%; max-width: 260px; height: auto; aspect-ratio: 1; margin: 0 auto; }
+    .seg { width: 100%; }
+    .seg button { flex: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"/><path d="M8.5 11.5l2.3 2.3 4.7-4.7"/></svg>
+    </div>
+    <div>
+      <h1>Bulk Sender</h1>
+      <p class="subtitle">Message many WhatsApp numbers from your own PC</p>
+    </div>
+    <div class="spacer"></div>
+    <span id="pill" class="pill wait"><span class="dot"></span><span id="pillText">Connecting…</span></span>
+  </header>
+
+  <!-- Connection -->
+  <section id="connCard" class="card">
+    <div id="offline" class="hidden">
+      <h2>Start the sender on your PC</h2>
+      <p class="hint">This page sends through a small program on <b>your own computer</b>, logged in to <b>your own WhatsApp</b>. Nobody else's number is ever used.</p>
+      <ol class="steps">
+        <li>Install <a href="https://nodejs.org" target="_blank" rel="noopener">Node.js</a> (one time)</li>
+        <li><a href="download/whatsapp-sender.zip" download>Download the sender</a> and unzip it</li>
+        <li>Double-click <b>start.bat</b> (or run <code>npm run server</code>)</li>
+      </ol>
+      <p class="hint mt">This page connects automatically once the sender is running.</p>
+      <details>
+        <summary class="hint" style="cursor:pointer;margin:0">Advanced: sender address</summary>
+        <div class="row mt">
+          <input id="serverUrl" type="text" style="flex:1;min-width:200px">
+          <button id="saveServer">Save</button>
+        </div>
+        <p class="hint mt">If the browser asks to allow access to devices on your local network, click <b>Allow</b>.</p>
+      </details>
+    </div>
+    <div id="qrBox" class="box hidden">
+      <div class="qr"><img id="qrImg" alt="WhatsApp login QR code"></div>
+      <div style="flex:1;min-width:220px">
+        <h2>Link your WhatsApp</h2>
+        <ol class="steps">
+          <li>Open <b>WhatsApp</b> on your phone</li>
+          <li>Go to <b>Settings → Linked devices</b></li>
+          <li>Tap <b>Link a device</b> and scan this code</li>
+        </ol>
+        <p class="hint mt">You only need to do this once.</p>
+      </div>
+    </div>
+    <div id="readyBox" class="row between hidden">
+      <div>
+        <h2>WhatsApp connected</h2>
+        <p class="hint" style="margin:0">Sending as <b id="meNum"></b></p>
+      </div>
+      <button id="logoutBtn" class="link">Log out</button>
+    </div>
+    <div id="waitBox" class="hidden">
+      <h2 id="waitTitle">Starting WhatsApp…</h2>
+      <p id="waitHint" class="hint" style="margin:0">This can take up to a minute.</p>
+    </div>
+  </section>
+
+  <!-- Compose -->
+  <div id="compose">
+    <section class="card">
+      <h2><span class="step">1</span>Numbers</h2>
+      <p class="hint">One per line or comma-separated. Numbers starting with 0 get country code <b id="ccLabel">92</b>.</p>
+      <textarea id="numbers" rows="5" placeholder="923001234567&#10;+92 300 7654321&#10;03111234567"></textarea>
+      <div class="row between mt">
+        <div id="numChips" class="chips"></div>
+        <label class="btn" for="fileInput">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+          Import CSV / TXT
+        </label>
+        <input id="fileInput" type="file" accept=".csv,.txt,text/csv,text/plain" hidden>
+      </div>
+      <p class="hint mt" style="margin-bottom:0">CSV columns: <code>number</code>, optional <code>name</code> and <code>message</code>.</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">2</span>Message</h2>
+      <p class="hint">Use <code>{name}</code> for the name from your CSV and <code>{sender}</code> for your name.</p>
+      <div class="sender">
+        <label for="senderName">Your name <span>(sender)</span></label>
+        <div class="row">
+          <input id="senderName" type="text" placeholder="e.g. Ali Khan" autocomplete="name" style="flex:1;min-width:180px">
+          <label class="check"><input id="signMsg" type="checkbox" checked> Sign each message</label>
+        </div>
+      </div>
+      <div class="seg" role="tablist">
+        <button id="modeOne" class="on" type="button">Same for everyone</button>
+        <button id="modeEach" type="button">Different for each</button>
+      </div>
+      <div id="oneBox">
+        <textarea id="oneMsg" rows="5" placeholder="Hi {name}, …"></textarea>
+      </div>
+      <div id="eachBox" class="hidden">
+        <div id="eachList" class="each-list"></div>
+        <p id="eachEmpty" class="hint" style="margin:0">Add some numbers above first.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">3</span>Send</h2>
+      <p class="hint" style="margin-bottom:8px">Speed: shorter pauses finish sooner but make a WhatsApp ban more likely.</p>
+      <div class="seg" id="speedSeg">
+        <button type="button" data-speed="fast">Fast</button>
+        <button type="button" data-speed="normal" class="on">Normal</button>
+        <button type="button" data-speed="safe">Safe</button>
+      </div>
+      <p id="summary" class="hint"></p>
+      <div id="previewWrap" class="hidden">
+        <p id="previewLabel" class="preview-label"></p>
+        <div id="preview" class="preview"></div>
+        <p style="margin:14px 0 0"></p>
+      </div>
+      <button id="sendBtn" class="primary grow" style="width:100%" disabled>Send messages</button>
+      <div class="notice"><b>Heads up:</b> this is unofficial automation, and WhatsApp may ban numbers that send in bulk. Only message people who expect to hear from you.</div>
+    </section>
+  </div>
+
+  <!-- Progress -->
+  <section id="progress" class="card hidden">
+    <div class="row between">
+      <h2 id="progTitle">Sending…</h2>
+      <button id="stopBtn" class="danger">Stop</button>
+    </div>
+    <div class="bar"><div id="barFill"></div></div>
+    <div class="row between">
+      <div id="progChips" class="chips"></div>
+      <span id="waitText" class="hint" style="margin:0"></span>
+    </div>
+    <ul id="log" class="log"></ul>
+    <button id="newBtn" class="mt hidden">← New message</button>
+  </section>
+
+  <footer>Runs entirely on your computer. Nothing is stored on this website.</footer>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const store = {
+    get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  let server = isLocal ? location.origin : store.get('serverUrl', 'http://localhost:3000');
+  let countryCode = '92';
+  let speeds = { fast: [2, 5], normal: [5, 15], safe: [15, 30] };
+  let speed = store.get('speed', 'normal');
+  let status = 'offline';
+  let sending = false;
+  let mode = 'one';
+  let fileData = {};      // number -> { name, message } from an imported CSV
+  let eachMsgs = {};      // number -> message typed in "Different for each"
+  let source;
+
+  $('serverUrl').value = server;
+
+  // ---------- numbers ----------
+  function normalize(raw) {
+    let d = String(raw).replace(/\D/g, '');
+    if (d.startsWith('00')) d = d.slice(2);
+    else if (d.startsWith('0')) d = countryCode + d.slice(1);
+    return d;
+  }
+
+  function getContacts() {
+    const seen = new Set();
+    const list = [];
+    for (const raw of $('numbers').value.split(/[,;\r\n]+/).map((s) => s.trim()).filter(Boolean)) {
+      const number = normalize(raw);
+      if (seen.has(number)) continue;
+      seen.add(number);
+      list.push({ raw, number, valid: number.length >= 10 && number.length <= 15, ...(fileData[number] || {}) });
+    }
+    return list;
+  }
+
+  const fill = (tpl, c) => tpl.replace(/\{(\w+)\}/g, (m, k) => (k === 'number' ? c.number : c[k] ?? m));
+
+  // ---------- CSV import ----------
+  function parseCSV(text) {
+    const rows = [];
+    let row = [], field = '', quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (quoted) {
+        if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+        else if (ch === '"') quoted = false;
+        else field += ch;
+      } else if (ch === '"') quoted = true;
+      else if (ch === ',') { row.push(field); field = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(field); rows.push(row); row = []; field = '';
+      } else field += ch;
+    }
+    if (field || row.length) { row.push(field); rows.push(row); }
+    return rows.filter((r) => r.some((f) => f.trim()));
+  }
+
+  $('fileInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const text = (await file.text()).replace(/^﻿/, '');
+    e.target.value = '';
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      $('numbers').value = text.trim();
+      fileData = {};
+      return render();
+    }
+    const [header, ...rows] = parseCSV(text);
+    const cols = header.map((h) => h.trim().toLowerCase());
+    const ni = cols.indexOf('number');
+    if (ni < 0) return alert('The CSV needs a "number" column.');
+
+    fileData = {};
+    const numbers = [];
+    for (const r of rows) {
+      const obj = {};
+      cols.forEach((c, i) => (obj[c] = (r[i] || '').trim()));
+      if (!obj.number) continue;
+      numbers.push(obj.number);
+      fileData[normalize(obj.number)] = obj;
+    }
+    $('numbers').value = numbers.join('\n');
+    const withMsg = Object.values(fileData).filter((d) => d.message);
+    if (withMsg.length) {
+      Object.entries(fileData).forEach(([n, d]) => { if (d.message) eachMsgs[n] = d.message; });
+      setMode('each');
+    }
+    render();
+  });
+
+  // ---------- message mode ----------
+  function setMode(m) {
+    mode = m;
+    $('modeOne').classList.toggle('on', m === 'one');
+    $('modeEach').classList.toggle('on', m === 'each');
+    $('oneBox').classList.toggle('hidden', m !== 'one');
+    $('eachBox').classList.toggle('hidden', m !== 'each');
+    render();
+  }
+  $('modeOne').onclick = () => setMode('one');
+  $('modeEach').onclick = () => setMode('each');
+
+  function renderEachList(contacts) {
+    const list = $('eachList');
+    const valid = contacts.filter((c) => c.valid);
+    $('eachEmpty').classList.toggle('hidden', valid.length > 0);
+    const key = valid.map((c) => c.number).join(',');
+    if (list.dataset.key === key) return;   // keep focus while typing
+    list.dataset.key = key;
+    list.innerHTML = '';
+    for (const c of valid) {
+      const item = document.createElement('div');
+      item.className = 'each-item';
+      const label = document.createElement('label');
+      label.textContent = c.name || c.number;
+      if (c.name) {
+        const span = document.createElement('span');
+        span.textContent = ' · ' + c.number;
+        label.append(span);
+      }
+      const ta = document.createElement('textarea');
+      ta.rows = 2;
+      ta.placeholder = 'Message for ' + (c.name || c.number);
+      ta.value = eachMsgs[c.number] || '';
+      ta.oninput = () => { eachMsgs[c.number] = ta.value; renderSummary(); };
+      label.htmlFor = ta.id = 'm' + c.number;
+      item.append(label, ta);
+      list.append(item);
+    }
+  }
+
+  function buildPayload() {
+    const sender = $('senderName').value.trim();
+    const sign = sender && $('signMsg').checked;
+    return getContacts()
+      .filter((c) => c.valid)
+      .map((c) => {
+        const tpl = mode === 'one' ? $('oneMsg').value : eachMsgs[c.number] || '';
+        if (!tpl.trim()) return null;
+        const message = fill(tpl, { ...c, sender });
+        return { number: c.number, message: sign ? `${message}\n\n— ${sender}` : message };
+      })
+      .filter(Boolean);
+  }
+
+  function renderSummary() {
+    const payload = buildPayload();
+    const n = payload.length;
+    const [min, max] = speeds[speed];
+    const avg = (min + max) / 2;
+    const mins = Math.max(1, Math.round((n * avg) / 60));
+    let text;
+    if (!getContacts().some((c) => c.valid)) text = 'Add at least one number.';
+    else if (!n) text = mode === 'one' ? 'Write a message.' : 'Write at least one message.';
+    else text = `${n} message${n > 1 ? 's' : ''} ready · about ${mins} min with ${min}–${max}s pauses between messages.`;
+    if (n && status !== 'ready') text += ' Connect WhatsApp first.';
+    $('summary').textContent = text;
+    $('previewWrap').classList.toggle('hidden', !n);
+    if (n) {
+      $('previewLabel').textContent = `Preview for +${payload[0].number}`;
+      $('preview').textContent = payload[0].message;
+    }
+    $('sendBtn').disabled = !n || status !== 'ready' || sending;
+    $('sendBtn').textContent = n ? `Send ${n} message${n > 1 ? 's' : ''}` : 'Send messages';
+  }
+
+  function render() {
+    const contacts = getContacts();
+    const valid = contacts.filter((c) => c.valid).length;
+    const invalid = contacts.length - valid;
+    $('numChips').innerHTML = contacts.length
+      ? `<span class="chip ok">${valid} valid</span>` + (invalid ? `<span class="chip bad">${invalid} invalid</span>` : '')
+      : '<span class="chip">No numbers yet</span>';
+    renderEachList(contacts);
+    renderSummary();
+  }
+
+  $('numbers').addEventListener('input', render);
+  $('oneMsg').addEventListener('input', renderSummary);
+  $('senderName').value = store.get('senderName', '');
+  $('senderName').addEventListener('input', () => { store.set('senderName', $('senderName').value); renderSummary(); });
+  $('signMsg').addEventListener('change', renderSummary);
+
+  function setSpeed(s) {
+    speed = s;
+    store.set('speed', s);
+    document.querySelectorAll('#speedSeg button').forEach((b) => {
+      b.classList.toggle('on', b.dataset.speed === s);
+      const [min, max] = speeds[b.dataset.speed];
+      b.textContent = `${b.dataset.speed[0].toUpperCase()}${b.dataset.speed.slice(1)} · ${min}–${max}s`;
+    });
+    renderSummary();
+  }
+  document.querySelectorAll('#speedSeg button').forEach((b) => (b.onclick = () => setSpeed(b.dataset.speed)));
+  setSpeed(speeds[speed] ? speed : 'normal');
+
+  // ---------- connection ----------
+  function setStatus(s, me) {
+    status = s;
+    const show = { offline: 'offline', qr: 'qrBox', ready: 'readyBox' }[s] || 'waitBox';
+    ['offline', 'qrBox', 'readyBox', 'waitBox'].forEach((id) => $(id).classList.toggle('hidden', id !== show));
+    const pill = {
+      offline: ['bad', 'Sender not running'],
+      qr: ['wait', 'Scan QR code'],
+      ready: ['ok', 'Connected'],
+      error: ['bad', 'Login failed'],
+    }[s] || ['wait', 'Starting…'];
+    const loggingIn = s === 'connecting';
+    $('waitTitle').textContent = loggingIn ? 'Logged in, loading your chats…' : 'Starting WhatsApp…';
+    $('waitHint').textContent = loggingIn
+      ? 'The first time can take a minute. If it gets stuck, it restarts by itself.'
+      : 'This can take up to a minute.';
+    $('pill').className = 'pill ' + pill[0];
+    $('pillText').textContent = pill[1];
+    if (me) $('meNum').textContent = '+' + me;
+    renderSummary();
+  }
+
+  async function api(path, body) {
+    const res = await fetch(server + path, body === undefined ? {} : {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
+  }
+
+  async function connect() {
+    source?.close();
+    try {
+      const s = await api('/api/status');
+      countryCode = s.config.defaultCountryCode;
+      speeds = s.config.speeds;
+      setSpeed(speeds[speed] ? speed : 'normal');
+      $('ccLabel').textContent = countryCode;
+      render();
+    } catch {
+      setStatus('offline');
+      return setTimeout(connect, 3000);
+    }
+    source = new EventSource(server + '/api/events');
+    source.onmessage = (e) => handleEvent(JSON.parse(e.data));
+    source.onerror = () => { source.close(); setStatus('offline'); setTimeout(connect, 3000); };
+  }
+
+  // ---------- sending ----------
+  const LABELS = { sent: 'Sent', failed: 'Failed', invalid: 'Invalid', not_on_whatsapp: 'Not on WhatsApp' };
+  let counts, total;
+
+  function showProgress(t) {
+    sending = true;
+    total = t;
+    counts = { sent: 0, failed: 0, skipped: 0 };
+    $('log').innerHTML = '';
+    $('barFill').style.width = '0';
+    $('progTitle').textContent = 'Sending…';
+    $('waitText').textContent = '';
+    $('stopBtn').classList.remove('hidden');
+    $('stopBtn').disabled = false;
+    $('newBtn').classList.add('hidden');
+    $('compose').classList.add('hidden');
+    $('progress').classList.remove('hidden');
+    updateProgress(0);
+  }
+
+  function updateProgress(done) {
+    $('barFill').style.width = (total ? (done / total) * 100 : 0) + '%';
+    $('progChips').innerHTML =
+      `<span class="chip">${done} / ${total}</span><span class="chip ok">${counts.sent} sent</span>` +
+      (counts.failed ? `<span class="chip bad">${counts.failed} failed</span>` : '') +
+      (counts.skipped ? `<span class="chip">${counts.skipped} skipped</span>` : '');
+  }
+
+  function handleEvent(e) {
+    if (e.type === 'status') {
+      if (e.qr) $('qrImg').src = e.qr;
+      return setStatus(e.status, e.me);
+    }
+    if (e.type === 'start') return showProgress(e.total);
+    if (!sending) return;
+    if (e.type === 'progress') {
+      if (e.status === 'sent') counts.sent++;
+      else if (e.status === 'failed') counts.failed++;
+      else counts.skipped++;
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="badge ${e.status}"></span><span class="num"></span><span class="err"></span>`;
+      li.children[0].textContent = LABELS[e.status] || e.status;
+      li.children[1].textContent = '+' + e.number;
+      li.children[2].textContent = e.status === 'not_on_whatsapp' || e.status === 'sent' ? '' : e.error || '';
+      $('log').prepend(li);
+      $('waitText').textContent = '';
+      updateProgress(e.index + 1);
+    } else if (e.type === 'waiting') {
+      $('waitText').textContent = `Next in ${e.seconds}s`;
+    } else if (e.type === 'done') {
+      sending = false;
+      $('progTitle').textContent = e.error ? 'Stopped with an error' : e.stopped ? 'Stopped' : 'All done 🎉';
+      $('waitText').textContent = e.error || '';
+      $('stopBtn').classList.add('hidden');
+      $('newBtn').classList.remove('hidden');
+      if (!e.stopped && !e.error) $('barFill').style.width = '100%';
+    }
+  }
+
+  $('sendBtn').onclick = async () => {
+    const contacts = buildPayload();
+    if (!confirm(`Send ${contacts.length} message(s) from your WhatsApp?`)) return;
+    $('sendBtn').disabled = true;
+    try { await api('/api/send', { contacts, speed }); }
+    catch (err) { alert(err.message); renderSummary(); }
+  };
+  $('stopBtn').onclick = async () => { $('stopBtn').disabled = true; $('progTitle').textContent = 'Stopping…'; await api('/api/stop', {}).catch(() => {}); };
+  $('newBtn').onclick = () => { $('progress').classList.add('hidden'); $('compose').classList.remove('hidden'); renderSummary(); };
+  $('logoutBtn').onclick = async () => {
+    if (!confirm('Log out of WhatsApp on this PC?')) return;
+    try { await api('/api/logout', {}); } catch (err) { alert(err.message); }
+  };
+  $('saveServer').onclick = () => {
+    server = $('serverUrl').value.trim().replace(/\/+$/, '');
+    store.set('serverUrl', server);
+    connect();
+  };
+
+  render();
+  connect();
+})();
+</script>
+</body>
+</html>

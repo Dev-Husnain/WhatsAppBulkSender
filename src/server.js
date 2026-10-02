@@ -1,0 +1,200 @@
+const path = require('path');
+const express = require('express');
+const QRCode = require('qrcode');
+const config = require('./config');
+const { buildClient } = require('./client');
+const { toContact, dedupe } = require('./contacts');
+const { createResultsLogger } = require('./results');
+const { sendAll } = require('./sender');
+
+const PORT = Number(process.env.PORT || 3000);
+const HOST = '127.0.0.1'; // only reachable from this computer
+
+// Pages allowed to talk to this server: the local page plus your Netlify site
+const allowedOrigins = new Set([
+  `http://localhost:${PORT}`,
+  `http://127.0.0.1:${PORT}`,
+  ...(process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
+]);
+
+// Host names this server answers to. Anything else is a DNS rebinding attempt
+// (a website pointing its own domain at 127.0.0.1 to read the QR code).
+const allowedHosts = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`]);
+
+// Pause between messages in seconds. Shorter pauses are faster but make a ban more likely.
+const SPEEDS = {
+  fast: [2, 5],
+  normal: [config.minDelay, config.maxDelay],
+  safe: [15, 30],
+};
+
+// ---------- WhatsApp connection state ----------
+
+const state = { status: 'starting', qr: null, me: null };
+const job = { running: false, stop: false, events: [] };
+const listeners = new Set();
+let client;
+
+function broadcast(event) {
+  const data = `data: ${JSON.stringify(event)}\n\n`;
+  for (const res of listeners) res.write(data);
+}
+
+function setState(patch) {
+  Object.assign(state, patch);
+  broadcast({ type: 'status', ...state });
+}
+
+// After the first QR scan, whatsapp-web.js sometimes logs in but never fires "ready".
+// The login is saved by then, so restarting the client fixes it.
+const READY_TIMEOUT_MS = 30 * 1000;
+let readyTimer;
+
+async function restartWhatsApp(reason) {
+  console.log(`Restarting WhatsApp: ${reason}`);
+  clearTimeout(readyTimer);
+  const old = client;
+  client = null;
+  old?.removeAllListeners();
+  await old?.destroy().catch(() => {});
+  setState({ status: 'starting', qr: null, me: null });
+  startWhatsApp();
+}
+
+function startWhatsApp() {
+  const c = buildClient();
+  client = c;
+  const t0 = Date.now();
+  const logEvent = (name, ...args) => console.log(`[wa +${((Date.now() - t0) / 1000).toFixed(1)}s] ${name}`, ...args);
+  ['qr', 'authenticated', 'auth_failure', 'ready', 'disconnected', 'change_state'].forEach((name) =>
+    c.on(name, (arg) => logEvent(name, name === 'qr' ? '' : arg ?? '')),
+  );
+  c.on('loading_screen', (percent, message) => logEvent('loading', `${percent}% ${message}`));
+
+  c.on('qr', async (qr) => setState({ status: 'qr', qr: await QRCode.toDataURL(qr, { margin: 1, width: 280 }) }));
+  c.on('authenticated', () => {
+    setState({ status: 'connecting', qr: null });
+    clearTimeout(readyTimer);
+    readyTimer = setTimeout(() => restartWhatsApp('logged in but not ready after 30s'), READY_TIMEOUT_MS);
+  });
+  c.on('ready', () => {
+    clearTimeout(readyTimer);
+    setState({ status: 'ready', qr: null, me: c.info?.wid?.user || null });
+  });
+  c.on('auth_failure', () => setState({ status: 'error', qr: null }));
+  c.on('disconnected', (reason) => restartWhatsApp(`disconnected (${reason})`));
+  c.initialize().catch((err) => {
+    if (client !== c) return; // this client was replaced by a restart
+    console.error('WhatsApp failed to start:', err.message);
+    setState({ status: 'error', qr: null });
+  });
+}
+
+// ---------- HTTP server ----------
+
+const app = express();
+app.use(express.json({ limit: '2mb' }));
+
+app.use((req, res, next) => {
+  if (!allowedHosts.has(req.headers.host)) return res.status(403).send('Forbidden host');
+
+  const origin = req.headers.origin;
+  if (origin) {
+    if (!allowedOrigins.has(origin)) return res.status(403).json({ error: `Origin ${origin} is not allowed` });
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Vary', 'Origin');
+  }
+  if (req.method === 'OPTIONS') {
+    res.set('Access-Control-Allow-Methods', 'GET,POST');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    // Lets an https page (Netlify) reach this localhost server in Chrome
+    res.set('Access-Control-Allow-Private-Network', 'true');
+    return res.sendStatus(204);
+  }
+  next();
+});
+
+app.use(express.static(path.join(__dirname, '..', 'public')));
+
+app.get('/api/status', (req, res) => {
+  res.json({ ...state, sending: job.running, config: { speeds: SPEEDS, defaultCountryCode: config.defaultCountryCode } });
+});
+
+// Live updates (connection status + sending progress) as Server-Sent Events
+app.get('/api/events', (req, res) => {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  res.flushHeaders();
+  res.write(`data: ${JSON.stringify({ type: 'status', ...state })}\n\n`);
+  if (job.running) job.events.forEach((e) => res.write(`data: ${JSON.stringify(e)}\n\n`));
+  listeners.add(res);
+  req.on('close', () => listeners.delete(res));
+});
+
+app.post('/api/send', (req, res) => {
+  if (state.status !== 'ready') return res.status(409).json({ error: 'WhatsApp is not connected yet' });
+  if (job.running) return res.status(409).json({ error: 'Already sending' });
+
+  const items = Array.isArray(req.body?.contacts) ? req.body.contacts : [];
+  const contacts = dedupe(
+    items
+      .filter((c) => c && c.number && String(c.message || '').trim())
+      .map((c) => ({ ...toContact(c.number, config.defaultCountryCode), message: String(c.message) })),
+  );
+  if (contacts.length === 0) return res.status(400).json({ error: 'No contacts with a number and a message' });
+
+  const [minDelay, maxDelay] = SPEEDS[req.body.speed] || SPEEDS.normal;
+
+  Object.assign(job, { running: true, stop: false, events: [] });
+  const onEvent = (e) => {
+    job.events.push(e);
+    broadcast(e);
+  };
+  onEvent({ type: 'start', total: contacts.length });
+
+  sendAll(client, contacts, {
+    minDelay,
+    maxDelay,
+    log: createResultsLogger(config.resultsFile),
+    shouldStop: () => job.stop,
+    onEvent,
+  })
+    .catch((err) => onEvent({ type: 'done', error: err.message, stats: null }))
+    .finally(() => (job.running = false));
+
+  res.json({ ok: true, total: contacts.length });
+});
+
+app.post('/api/stop', (req, res) => {
+  job.stop = true;
+  res.json({ ok: true });
+});
+
+app.post('/api/logout', async (req, res) => {
+  if (job.running) return res.status(409).json({ error: 'Stop sending first' });
+  try {
+    await client.logout();
+  } catch {
+    // ignore, we restart below anyway
+  }
+  await restartWhatsApp('logged out');
+  res.json({ ok: true });
+});
+
+app.listen(PORT, HOST, (err) => {
+  if (err) {
+    console.error(err.code === 'EADDRINUSE'
+      ? `Port ${PORT} is already in use. Is the sender already running in another terminal?`
+      : `Server failed to start: ${err.message}`);
+    process.exit(1);
+  }
+  console.log(`\nWhatsApp sender running at http://localhost:${PORT}`);
+  console.log(`Allowed pages: ${[...allowedOrigins].join(', ')}`);
+  console.log('Press Ctrl+C to stop.\n');
+  startWhatsApp();
+});
+
+process.on('SIGINT', async () => {
+  console.log('\nShutting down...');
+  await client?.destroy().catch(() => {});
+  process.exit(0);
+});
