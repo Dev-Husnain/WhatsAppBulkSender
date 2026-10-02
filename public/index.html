@@ -328,7 +328,7 @@
         </div>
         <input id="attachInput" type="file" hidden>
         <div id="attachChip"></div>
-        <p class="hint" style="margin:8px 0 0">Optional: image, PDF, document, audio or video up to 64 MB, sent to everyone.
+        <p class="hint" style="margin:8px 0 0">Optional: image, PDF, document, audio or video up to <span id="maxFileLabel">150</span> MB, sent to everyone.
           <span id="eachAttachHint" class="hidden">Use <b>Attach</b> next to a number to send that person a different file.</span></p>
       </div>
     </section>
@@ -393,7 +393,7 @@
   let eachMsgs = {};      // number -> message typed in "Different for each"
   let globalFile = null;  // attachment for everyone (a File)
   let eachFiles = {};     // number -> File attached in "Different for each"
-  const MAX_FILE_MB = 64;
+  let maxFileMb = 150;     // updated from the sender's settings on connect
   let source;
 
   $('serverUrl').value = server;
@@ -545,8 +545,8 @@
   const fmtSize = (b) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
 
   function checkFile(file) {
-    if (file.size > MAX_FILE_MB * 1024 * 1024) {
-      alert(`"${file.name}" is ${fmtSize(file.size)}. The maximum is ${MAX_FILE_MB} MB.`);
+    if (file.size > maxFileMb * 1024 * 1024) {
+      alert(`"${file.name}" is ${fmtSize(file.size)}. The maximum is ${maxFileMb} MB.`);
       return false;
     }
     return true;
@@ -728,6 +728,10 @@
     try {
       const s = await api('/api/status');
       countryCode = s.config.defaultCountryCode;
+      if (s.config.maxUploadMb) {
+        maxFileMb = s.config.maxUploadMb;
+        $('maxFileLabel').textContent = maxFileMb;
+      }
       speeds = s.config.speeds;
       setSpeed(speeds[speed] ? speed : 'normal');
       $('ccLabel').textContent = countryCode;

@@ -52,7 +52,7 @@ different message for each number.
 - **Your own WhatsApp:** log in by scanning a QR code, just like WhatsApp Web. The login is saved for next time.
 - **No WhatsApp window:** WhatsApp runs in a hidden browser in the background.
 - **Flexible messages:** one message for everyone, a separate message per number, or messages from a CSV file.
-- **Attachments:** send an image, PDF, document, audio or video (up to 64 MB) to everyone, or a different file per number. The message can go as the file's caption.
+- **Attachments:** send an image, PDF, document, audio or video (up to 150 MB by default) to everyone, or a different file per number. The message can go as the file's caption.
 - **Placeholders:** `{name}` inserts the contact's name and `{sender}` inserts your name. Any CSV column works as `{column}`.
 - **Sender name:** optionally sign every message with `— Your Name`.
 - **Any number format:** `+92 300 1234567`, `0300-1234567` and `923001234567` all work. Duplicates are removed.
@@ -112,6 +112,7 @@ static web hosting like Netlify can't provide that. It also keeps every user's W
    **Stop** at any time.
 
 Files are sent from your PC straight to WhatsApp. They're held in the sender's memory only until they're sent.
+The default limit is 150 MB per file. Raise it with `MAX_UPLOAD_MB` (up to about 190 MB, see [Configuration](#configuration)).
 Sending files in bulk looks more like spam than text, so prefer the **Normal** or **Safe** speed.
 
 Use **Log out** on the page to unlink WhatsApp from this computer.
@@ -221,6 +222,7 @@ Optional. Create a `.env` file next to the exe (or in the project folder) to cha
 | `MIN_DELAY` / `MAX_DELAY` | `5` / `15` | Pause range in seconds for the **Normal** speed |
 | `RESULTS_FILE` | `results.csv` | Where results are written |
 | `ALLOWED_ORIGINS` | *(empty)* | Extra web pages allowed to use the sender, comma-separated. The hosted page is always allowed. |
+| `MAX_UPLOAD_MB` | `150` | Largest attachment in MB. The maximum is 190: WhatsApp allows up to 2 GB, but whatsapp-web.js passes files to the browser over a 256 MB channel. |
 | `PORT` | `3000` | Port for the sender. The page is then at `http://localhost:<PORT>`. |
 | `BROWSER_PATH` | auto | Path to a specific `chrome.exe` / `msedge.exe` |
 | `DEFAULT_MESSAGE`, `CONTACTS_FILE` | | Defaults for the terminal version |
