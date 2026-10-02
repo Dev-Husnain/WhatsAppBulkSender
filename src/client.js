@@ -1,13 +1,17 @@
+const path = require('path');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const { dataDir, findBrowser } = require('./paths');
 
 // A headless WhatsApp Web client. The login is saved in .wwebjs_auth/ and reused,
 // so the QR code only has to be scanned once.
 function buildClient() {
   return new Client({
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth({ dataPath: path.join(dataDir, '.wwebjs_auth') }),
+    webVersionCache: { type: 'local', path: path.join(dataDir, '.wwebjs_cache') },
     puppeteer: {
       headless: true,
+      executablePath: findBrowser(),
       // Skip Chrome features WhatsApp Web doesn't need, so it starts faster
       args: [
         '--no-sandbox',

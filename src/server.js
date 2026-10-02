@@ -7,15 +7,18 @@ const { toContact, dedupe } = require('./contacts');
 const { createResultsLogger } = require('./results');
 const { sendAll } = require('./sender');
 
+const { isExe } = require('./paths');
+
 const PORT = Number(process.env.PORT || 3000);
 const HOST = '127.0.0.1'; // only reachable from this computer
+const PAGE_URL = `http://localhost:${PORT}`;
 
-// Pages allowed to talk to this server: the local page plus your Netlify site
-const allowedOrigins = new Set([
-  `http://localhost:${PORT}`,
-  `http://127.0.0.1:${PORT}`,
-  ...(process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
-]);
+// The exe has the page built in (see scripts/build-exe.js); from source it's read from public/
+// eslint-disable-next-line no-undef
+const EMBEDDED_PAGE = typeof __EMBEDDED_PAGE__ !== 'undefined' ? __EMBEDDED_PAGE__ : null;
+
+// Pages allowed to talk to this server: the local page plus the hosted (Netlify) page
+const allowedOrigins = new Set([PAGE_URL, `http://127.0.0.1:${PORT}`, ...config.allowedOrigins]);
 
 // Host names this server answers to. Anything else is a DNS rebinding attempt
 // (a website pointing its own domain at 127.0.0.1 to read the QR code).
@@ -30,7 +33,7 @@ const SPEEDS = {
 
 // ---------- WhatsApp connection state ----------
 
-const state = { status: 'starting', qr: null, me: null };
+const state = { status: 'starting', qr: null, me: null, error: null };
 const job = { running: false, stop: false, events: [] };
 const listeners = new Set();
 let client;
@@ -41,7 +44,7 @@ function broadcast(event) {
 }
 
 function setState(patch) {
-  Object.assign(state, patch);
+  Object.assign(state, { error: null }, patch);
   broadcast({ type: 'status', ...state });
 }
 
@@ -81,13 +84,27 @@ function startWhatsApp() {
     clearTimeout(readyTimer);
     setState({ status: 'ready', qr: null, me: c.info?.wid?.user || null });
   });
-  c.on('auth_failure', () => setState({ status: 'error', qr: null }));
+  c.on('auth_failure', () => setState({ status: 'error', qr: null, error: 'WhatsApp login failed. Restart the sender and scan again.' }));
   c.on('disconnected', (reason) => restartWhatsApp(`disconnected (${reason})`));
   c.initialize().catch((err) => {
     if (client !== c) return; // this client was replaced by a restart
-    console.error('WhatsApp failed to start:', err.message);
-    setState({ status: 'error', qr: null });
+    const error = explainStartError(err.message);
+    console.error(`WhatsApp failed to start: ${err.message}\n${error}`);
+    setState({ status: 'error', qr: null, error });
   });
+}
+
+function explainStartError(message) {
+  if (/BLOCKED_BY_ADMINISTRATOR/.test(message)) {
+    return 'WhatsApp Web is blocked on this computer by your organization (browser policy). Ask your IT admin, or use a personal computer.';
+  }
+  if (/ERR_INTERNET_DISCONNECTED|ERR_NAME_NOT_RESOLVED|ERR_CONNECTION/.test(message)) {
+    return 'Could not reach WhatsApp. Check your internet connection and restart the sender.';
+  }
+  if (/executable|Browser was not found|Failed to launch/i.test(message)) {
+    return 'Could not start a browser. Make sure Google Chrome or Microsoft Edge is installed.';
+  }
+  return 'WhatsApp could not start. Restart the sender and try again.';
 }
 
 // ---------- HTTP server ----------
@@ -114,7 +131,11 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.static(path.join(__dirname, '..', 'public')));
+if (EMBEDDED_PAGE) {
+  app.get('/', (req, res) => res.type('html').send(EMBEDDED_PAGE));
+} else {
+  app.use(express.static(path.join(__dirname, '..', 'public')));
+}
 
 app.get('/api/status', (req, res) => {
   res.json({ ...state, sending: job.running, config: { speeds: SPEEDS, defaultCountryCode: config.defaultCountryCode } });
@@ -182,16 +203,34 @@ app.post('/api/logout', async (req, res) => {
 
 app.listen(PORT, HOST, (err) => {
   if (err) {
-    console.error(err.code === 'EADDRINUSE'
-      ? `Port ${PORT} is already in use. Is the sender already running in another terminal?`
-      : `Server failed to start: ${err.message}`);
-    process.exit(1);
+    if (err.code === 'EADDRINUSE') {
+      console.error(`The sender is already running. Opening ${PAGE_URL} ...`);
+      if (isExe) openBrowser();
+    } else {
+      console.error(`Server failed to start: ${err.message}`);
+    }
+    return exitAfterKeypress(1);
   }
-  console.log(`\nWhatsApp sender running at http://localhost:${PORT}`);
-  console.log(`Allowed pages: ${[...allowedOrigins].join(', ')}`);
-  console.log('Press Ctrl+C to stop.\n');
+  console.log('\n  WhatsApp Bulk Sender is running');
+  console.log(`  Open ${PAGE_URL} (or the hosted page) in your browser.`);
+  console.log('  Keep this window open while sending. Close it to stop.\n');
+  if (!isExe) console.log(`Allowed pages: ${[...allowedOrigins].join(', ')}\n`);
   startWhatsApp();
+  if (isExe) openBrowser();
 });
+
+function openBrowser() {
+  if (process.env.NO_OPEN) return;
+  require('child_process').exec(`start "" "${PAGE_URL}"`);
+}
+
+// A double-clicked exe closes its window on exit, so leave errors readable
+function exitAfterKeypress(code) {
+  if (!isExe || !process.stdin.isTTY) process.exit(code);
+  console.log('\nPress any key to close.');
+  process.stdin.setRawMode(true);
+  process.stdin.once('data', () => process.exit(code));
+}
 
 process.on('SIGINT', async () => {
   console.log('\nShutting down...');

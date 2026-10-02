@@ -216,12 +216,16 @@
     <div id="offline" class="hidden">
       <h2>Start the sender on your PC</h2>
       <p class="hint">This page sends through a small program on <b>your own computer</b>, logged in to <b>your own WhatsApp</b>. Nobody else's number is ever used.</p>
-      <ol class="steps">
-        <li>Install <a href="https://nodejs.org" target="_blank" rel="noopener">Node.js</a> (one time)</li>
-        <li><a href="download/whatsapp-sender.zip" download>Download the sender</a> and unzip it</li>
-        <li>Double-click <b>start.bat</b> (or run <code>npm run server</code>)</li>
+      <a class="btn primary mt" href="https://github.com/Dev-Husnain/WhatsAppBulkSender/releases/latest/download/WhatsAppBulkSender.exe" style="text-decoration:none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Download for Windows
+      </a>
+      <ol class="steps mt">
+        <li>Double-click <b>WhatsAppBulkSender.exe</b>. Nothing to install.</li>
+        <li>If Windows says <b>"Windows protected your PC"</b>, click <b>More info → Run anyway</b>.</li>
+        <li>This page connects by itself. Then scan the QR code with your WhatsApp.</li>
       </ol>
-      <p class="hint mt">This page connects automatically once the sender is running.</p>
+      <p class="hint mt">Needs Google Chrome or Microsoft Edge (already on most PCs). On Mac or Linux, <a href="https://github.com/Dev-Husnain/WhatsAppBulkSender#run-from-source" target="_blank" rel="noopener">run it from source</a>.</p>
       <details>
         <summary class="hint" style="cursor:pointer;margin:0">Advanced: sender address</summary>
         <div class="row mt">
@@ -539,7 +543,7 @@
   setSpeed(speeds[speed] ? speed : 'normal');
 
   // ---------- connection ----------
-  function setStatus(s, me) {
+  function setStatus(s, me, error) {
     status = s;
     const show = { offline: 'offline', qr: 'qrBox', ready: 'readyBox' }[s] || 'waitBox';
     ['offline', 'qrBox', 'readyBox', 'waitBox'].forEach((id) => $(id).classList.toggle('hidden', id !== show));
@@ -547,13 +551,14 @@
       offline: ['bad', 'Sender not running'],
       qr: ['wait', 'Scan QR code'],
       ready: ['ok', 'Connected'],
-      error: ['bad', 'Login failed'],
+      error: ['bad', 'Problem'],
     }[s] || ['wait', 'Starting…'];
-    const loggingIn = s === 'connecting';
-    $('waitTitle').textContent = loggingIn ? 'Logged in, loading your chats…' : 'Starting WhatsApp…';
-    $('waitHint').textContent = loggingIn
-      ? 'The first time can take a minute. If it gets stuck, it restarts by itself.'
-      : 'This can take up to a minute.';
+    const [title, hint] = {
+      connecting: ['Logged in, loading your chats…', 'The first time can take a minute. If it gets stuck, it restarts by itself.'],
+      error: ['WhatsApp could not start', error || 'Restart the sender and try again.'],
+    }[s] || ['Starting WhatsApp…', 'This can take up to a minute.'];
+    $('waitTitle').textContent = title;
+    $('waitHint').textContent = hint;
     $('pill').className = 'pill ' + pill[0];
     $('pillText').textContent = pill[1];
     if (me) $('meNum').textContent = '+' + me;
@@ -618,7 +623,7 @@
   function handleEvent(e) {
     if (e.type === 'status') {
       if (e.qr) $('qrImg').src = e.qr;
-      return setStatus(e.status, e.me);
+      return setStatus(e.status, e.me, e.error);
     }
     if (e.type === 'start') return showProgress(e.total);
     if (!sending) return;
