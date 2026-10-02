@@ -13,6 +13,7 @@
     "node": ">=18"
   },
   "scripts": {
+    "postinstall": "node scripts/patch-wwebjs.js",
     "start": "node src/index.js",
     "dry-run": "node src/index.js --dry-run",
     "resume": "node src/index.js --resume",

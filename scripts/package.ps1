@@ -2,7 +2,7 @@
 # Only listed files are copied, so your WhatsApp login (.wwebjs_auth), .env and results never get in.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$include = @('src', 'package.json', 'package-lock.json', '.env.example', 'contacts.csv', 'start.bat', 'README.md', 'LICENSE')
+$include = @('src', 'package.json', 'package-lock.json', '.env.example', 'contacts.csv', 'start.bat', 'scripts', 'README.md', 'LICENSE')
 
 $stage = Join-Path ([IO.Path]::GetTempPath()) "whatsapp-sender-$([guid]::NewGuid())"
 $target = Join-Path $stage 'whatsapp-sender'
