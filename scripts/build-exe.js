@@ -16,6 +16,8 @@ async function main() {
   fs.rmSync(dist, { recursive: true, force: true });
   fs.mkdirSync(dist);
 
+  require('./patch-wwebjs');
+
   console.log('1/4 Bundling...');
   await esbuild.build({
     entryPoints: [path.join(__dirname, 'exe-entry.js')],

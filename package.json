@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-bulk-sender",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Send WhatsApp messages to many numbers from your own PC, with a terminal and a web interface.",
   "author": "Dev-Husnain",
   "license": "MIT",
@@ -13,6 +13,7 @@
     "node": ">=18"
   },
   "scripts": {
+    "postinstall": "node scripts/patch-wwebjs.js",
     "start": "node src/index.js",
     "dry-run": "node src/index.js --dry-run",
     "resume": "node src/index.js --resume",
