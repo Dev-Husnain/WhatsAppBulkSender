@@ -190,6 +190,7 @@ Settings live in `.env` (copy it from `.env.example`):
 | `CONTACTS_FILE` | `contacts.csv` | Default file offered by the terminal version |
 | `RESULTS_FILE` | `results.csv` | Where results are written |
 | `ALLOWED_ORIGINS` | Netlify URL | Extra web pages allowed to use the sender, comma-separated |
+| `MAX_UPLOAD_MB` | `150` | Largest attachment in MB. The maximum is 190: WhatsApp allows up to 2 GB, but whatsapp-web.js passes files to the browser over a 256 MB channel. |
 | `PORT` | `3000` | Port for the sender. The page is then at `http://localhost:<PORT>`. |
 
 ## Sending speed

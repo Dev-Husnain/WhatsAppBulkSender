@@ -36,7 +36,7 @@ const state = { status: 'starting', qr: null, me: null };
 const job = { running: false, stop: false, events: [] };
 
 // Attachments uploaded by the page, kept in memory until they are sent
-const MAX_UPLOAD_MB = 64;
+const MAX_UPLOAD_MB = config.maxUploadMb;
 const UPLOAD_TTL_MS = 60 * 60 * 1000;
 const uploads = new Map(); // id -> { media, name, size, expires }
 
@@ -129,7 +129,7 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/api/status', (req, res) => {
-  res.json({ ...state, sending: job.running, config: { speeds: SPEEDS, defaultCountryCode: config.defaultCountryCode } });
+  res.json({ ...state, sending: job.running, config: { speeds: SPEEDS, defaultCountryCode: config.defaultCountryCode, maxUploadMb: MAX_UPLOAD_MB } });
 });
 
 // Live updates (connection status + sending progress) as Server-Sent Events

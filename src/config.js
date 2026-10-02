@@ -5,6 +5,9 @@ const config = {
   defaultMessage: process.env.DEFAULT_MESSAGE || 'Hello {name}!',
   minDelay: Number(process.env.MIN_DELAY || 5),
   maxDelay: Number(process.env.MAX_DELAY || 15),
+  // whatsapp-web.js hands files to the browser as base64 over a 256 MB channel,
+  // so about 190 MB is the most that can work (WhatsApp itself allows up to 2 GB)
+  maxUploadMb: Math.min(Number(process.env.MAX_UPLOAD_MB || 150), 190),
   contactsFile: process.env.CONTACTS_FILE || 'contacts.csv',
   resultsFile: process.env.RESULTS_FILE || 'results.csv',
 };
