@@ -44,6 +44,7 @@ everyone or a different message for each number.
 - **Your own WhatsApp:** log in once by scanning a QR code, just like WhatsApp Web. The login is saved for next time.
 - **No WhatsApp window:** WhatsApp runs in a hidden browser in the background.
 - **Flexible messages:** one message for everyone, a separate message per number, or messages from a CSV file.
+- **Attachments:** send an image, PDF, document, audio or video (up to 150 MB by default) to everyone, or a different file per number. The message can go as the file's caption.
 - **Placeholders:** `{name}` inserts the contact's name and `{sender}` inserts your name. Any CSV column works as `{column}`.
 - **Sender name:** optionally sign every message with `— Your Name`.
 - **Any number format:** `+92 300 1234567`, `0300-1234567` and `923001234567` all work. Duplicates are removed automatically.
@@ -111,7 +112,15 @@ Then open **http://localhost:3000**.
    - Enter **your name** and tick **Sign each message** to add `— Your Name` at the end.
    - Choose **Same for everyone** or **Different for each**. When you import a CSV with a `message`
      column, it switches to **Different for each** and fills those in for you.
-4. **Send:** pick a speed, check the preview bubble, and click **Send**. Progress appears live, and you can **Stop** at any time.
+4. **Attachment (optional):** click **Attach file** to send the same file to everyone. In **Different for each**,
+   click **Attach** next to a number to give that person their own file. Keep **Send message as caption** ticked
+   to put the text under the file, or untick it to send the file and the text as two messages. A message is
+   optional when a file is attached.
+5. **Send:** pick a speed, check the preview bubble, and click **Send**. Progress appears live, and you can **Stop** at any time.
+
+Files are sent from your PC straight to WhatsApp and held in the sender's memory only until they're sent.
+The default limit is 150 MB per file (`MAX_UPLOAD_MB` in `.env`, up to about 190 MB; see [Configuration](#configuration)).
+Sending files in bulk looks more like spam than text, so prefer the **Normal** or **Safe** speed.
 
 Use **Log out** on the page to unlink WhatsApp from this computer.
 
@@ -130,6 +139,7 @@ The terminal asks you step by step:
 ? Add "— Ali Khan" at the end of every message?  Yes
 ? Which messages should be sent?         › One message for all numbers / A separate message for each number
 ? Message for everyone:                  Hi {name}!\nSee you tomorrow.
+? Attach a file for everyone? (path, empty for none):  D:\files\price-list.pdf
 --- Preview ---
 ? Send 2 message(s) now?                 No
 ```
@@ -156,6 +166,9 @@ number,name,message
 ```
 
 - Rows with an empty `message` use the message you type (one for all).
+- **Terminal version only:** add a `file` column with a file path (absolute, or relative to the folder you run
+  from) to send that row its own attachment, e.g. `923000000001,Ali,"Your invoice",invoices/ali.pdf`. On the
+  web page, use the **Attach** buttons instead.
 - Wrap messages that contain commas in double quotes.
 - Any column can be used as a placeholder. A `city` column, for example, becomes `{city}`.
 

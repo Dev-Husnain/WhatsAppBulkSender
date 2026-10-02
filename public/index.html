@@ -151,6 +151,26 @@
   .each-list { display: grid; gap: 12px; max-height: 460px; overflow: auto; padding-right: 4px; }
   .each-item label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
   .each-item label span { color: var(--muted); font-weight: 400; }
+  .each-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .each-head label { margin: 0; }
+  .each-head .link { font-size: 13px; }
+  .each-item .file-chip { margin-top: 6px; }
+
+  .attach { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border); }
+  .file-chip {
+    display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 8px 10px;
+    background: var(--input); border: 1px solid var(--border); border-radius: 12px; font-size: 13.5px; max-width: 100%;
+  }
+  .file-chip img, .file-chip .ficon {
+    width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none;
+    display: grid; place-items: center; background: var(--brand-soft); color: var(--brand-strong); font-size: 11px; font-weight: 700;
+  }
+  .file-chip .fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-chip .fsize { color: var(--muted); font-size: 12px; }
+  .file-chip button { border: none; background: none; padding: 4px 8px; color: var(--muted); font-size: 18px; line-height: 1; }
+  .file-chip button:hover { color: var(--danger); background: none; }
+  .preview .pfile { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 6px; }
+  .preview img { display: block; max-width: 100%; max-height: 180px; border-radius: 8px; margin-bottom: 8px; }
 
   .box { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
   .qr { background: #fff; border-radius: 14px; padding: 10px; border: 1px solid var(--border); width: 220px; height: 220px; display: grid; place-items: center; flex: none; }
@@ -292,6 +312,19 @@
         <div id="eachList" class="each-list"></div>
         <p id="eachEmpty" class="hint" style="margin:0">Add some numbers above first.</p>
       </div>
+      <div class="attach">
+        <div class="row between">
+          <label class="btn" for="attachInput">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
+            <span id="attachLabel">Attach file</span>
+          </label>
+          <label class="check"><input id="captionMode" type="checkbox" checked> Send message as caption</label>
+        </div>
+        <input id="attachInput" type="file" hidden>
+        <div id="attachChip"></div>
+        <p class="hint" style="margin:8px 0 0">Optional: image, PDF, document, audio or video up to 64 MB, sent to everyone.
+          <span id="eachAttachHint" class="hidden">Use <b>Attach</b> next to a number to send that person a different file.</span></p>
+      </div>
     </section>
 
     <section class="card">
@@ -349,6 +382,9 @@
   let mode = 'one';
   let fileData = {};      // number -> { name, message } from an imported CSV
   let eachMsgs = {};      // number -> message typed in "Different for each"
+  let globalFile = null;  // attachment for everyone (a File)
+  let eachFiles = {};     // number -> File attached in "Different for each"
+  const MAX_FILE_MB = 64;
   let source;
 
   $('serverUrl').value = server;
@@ -437,6 +473,7 @@
     $('modeEach').classList.toggle('on', m === 'each');
     $('oneBox').classList.toggle('hidden', m !== 'one');
     $('eachBox').classList.toggle('hidden', m !== 'each');
+    $('eachAttachHint').classList.toggle('hidden', m !== 'each');
     render();
   }
   $('modeOne').onclick = () => setMode('one');
@@ -466,9 +503,96 @@
       ta.value = eachMsgs[c.number] || '';
       ta.oninput = () => { eachMsgs[c.number] = ta.value; renderSummary(); };
       label.htmlFor = ta.id = 'm' + c.number;
-      item.append(label, ta);
+
+      // Optional file just for this number (overrides the file for everyone)
+      const head = document.createElement('div');
+      head.className = 'each-head';
+      const attach = document.createElement('button');
+      attach.type = 'button';
+      attach.className = 'link';
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.hidden = true;
+      const chipBox = document.createElement('div');
+      const renderItemFile = () => {
+        const f = eachFiles[c.number];
+        attach.textContent = f ? 'Change file' : 'Attach';
+        chipBox.replaceChildren(...(f ? [fileChip(f, () => { delete eachFiles[c.number]; renderItemFile(); renderSummary(); })] : []));
+      };
+      attach.onclick = () => input.click();
+      input.onchange = () => {
+        const f = input.files[0];
+        input.value = '';
+        if (f && checkFile(f)) { eachFiles[c.number] = f; renderItemFile(); renderSummary(); }
+      };
+      renderItemFile();
+      head.append(label, attach);
+      item.append(head, ta, input, chipBox);
       list.append(item);
     }
+  }
+
+  // ---------- attachments ----------
+  const fmtSize = (b) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
+
+  function checkFile(file) {
+    if (file.size > MAX_FILE_MB * 1024 * 1024) {
+      alert(`"${file.name}" is ${fmtSize(file.size)}. The maximum is ${MAX_FILE_MB} MB.`);
+      return false;
+    }
+    return true;
+  }
+
+  function fileChip(file, onRemove) {
+    const chip = document.createElement('div');
+    chip.className = 'file-chip';
+    let icon;
+    if (file.type.startsWith('image/')) {
+      icon = document.createElement('img');
+      icon.src = URL.createObjectURL(file);
+      icon.alt = '';
+    } else {
+      icon = document.createElement('span');
+      icon.className = 'ficon';
+      icon.textContent = (file.name.includes('.') ? file.name.split('.').pop() : 'file').slice(0, 4).toUpperCase();
+    }
+    const name = document.createElement('span');
+    name.className = 'fname';
+    name.textContent = file.name;
+    const size = document.createElement('span');
+    size.className = 'fsize';
+    size.textContent = fmtSize(file.size);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.title = 'Remove file';
+    remove.textContent = '×';
+    remove.onclick = onRemove;
+    chip.append(icon, name, size, remove);
+    return chip;
+  }
+
+  function renderGlobalFile() {
+    $('attachChip').replaceChildren(...(globalFile ? [fileChip(globalFile, () => { globalFile = null; renderGlobalFile(); })] : []));
+    $('attachLabel').textContent = globalFile ? 'Change file' : 'Attach file';
+    renderSummary();
+  }
+
+  $('attachInput').onchange = (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (f && checkFile(f)) { globalFile = f; renderGlobalFile(); }
+  };
+  $('captionMode').onchange = renderSummary;
+
+  async function upload(file) {
+    const res = await fetch(server + '/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name) },
+      body: file,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    return data.id;
   }
 
   function buildPayload() {
@@ -478,11 +602,31 @@
       .filter((c) => c.valid)
       .map((c) => {
         const tpl = mode === 'one' ? $('oneMsg').value : eachMsgs[c.number] || '';
-        if (!tpl.trim()) return null;
-        const message = fill(tpl, { ...c, sender });
-        return { number: c.number, message: sign ? `${message}\n\n— ${sender}` : message };
+        const file = (mode === 'each' && eachFiles[c.number]) || globalFile;
+        if (!tpl.trim() && !file) return null;
+        const message = tpl.trim() ? fill(tpl, { ...c, sender }) : '';
+        return { number: c.number, message: sign && message ? `${message}\n\n— ${sender}` : message, file };
       })
       .filter(Boolean);
+  }
+
+  function renderPreview(p) {
+    const box = $('preview');
+    box.replaceChildren();
+    if (p.file) {
+      if (p.file.type.startsWith('image/')) {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(p.file);
+        img.alt = p.file.name;
+        box.append(img);
+      } else {
+        const f = document.createElement('div');
+        f.className = 'pfile';
+        f.textContent = `📎 ${p.file.name} · ${fmtSize(p.file.size)}`;
+        box.append(f);
+      }
+    }
+    if (p.message) box.append(document.createTextNode(p.message));
   }
 
   function renderSummary() {
@@ -492,15 +636,17 @@
     const avg = (min + max) / 2;
     const mins = Math.max(1, Math.round((n * avg) / 60));
     let text;
+    const withFiles = payload.filter((p) => p.file).length;
     if (!getContacts().some((c) => c.valid)) text = 'Add at least one number.';
-    else if (!n) text = mode === 'one' ? 'Write a message.' : 'Write at least one message.';
-    else text = `${n} message${n > 1 ? 's' : ''} ready · about ${mins} min with ${min}–${max}s pauses between messages.`;
+    else if (!n) text = mode === 'one' ? 'Write a message or attach a file.' : 'Write at least one message or attach a file.';
+    else text = `${n} message${n > 1 ? 's' : ''} ready${withFiles ? ` (${withFiles} with a file)` : ''} · about ${mins} min with ${min}–${max}s pauses between messages.`;
+    if (withFiles && speed === 'fast') text += ' Tip: use Normal or Safe when sending files.';
     if (n && status !== 'ready') text += ' Connect WhatsApp first.';
     $('summary').textContent = text;
     $('previewWrap').classList.toggle('hidden', !n);
     if (n) {
       $('previewLabel').textContent = `Preview for +${payload[0].number}`;
-      $('preview').textContent = payload[0].message;
+      renderPreview(payload[0]);
     }
     $('sendBtn').disabled = !n || status !== 'ready' || sending;
     $('sendBtn').textContent = n ? `Send ${n} message${n > 1 ? 's' : ''}` : 'Send messages';
@@ -645,11 +791,23 @@
   }
 
   $('sendBtn').onclick = async () => {
-    const contacts = buildPayload();
-    if (!confirm(`Send ${contacts.length} message(s) from your WhatsApp?`)) return;
+    const payload = buildPayload();
+    if (!confirm(`Send ${payload.length} message(s) from your WhatsApp?`)) return;
     $('sendBtn').disabled = true;
-    try { await api('/api/send', { contacts, speed }); }
-    catch (err) { alert(err.message); renderSummary(); }
+    try {
+      // Upload each distinct file once, then refer to it by id
+      const ids = new Map();
+      const files = [...new Set(payload.map((p) => p.file).filter(Boolean))];
+      for (const [i, file] of files.entries()) {
+        $('sendBtn').textContent = `Uploading file ${i + 1} of ${files.length}…`;
+        ids.set(file, await upload(file));
+      }
+      const contacts = payload.map((p) => ({ number: p.number, message: p.message, file: p.file ? ids.get(p.file) : undefined }));
+      await api('/api/send', { contacts, speed, caption: $('captionMode').checked });
+    } catch (err) {
+      alert(err.message);
+      renderSummary();
+    }
   };
   $('stopBtn').onclick = async () => { $('stopBtn').disabled = true; $('progTitle').textContent = 'Stopping…'; await api('/api/stop', {}).catch(() => {}); };
   $('newBtn').onclick = () => { $('progress').classList.add('hidden'); $('compose').classList.remove('hidden'); renderSummary(); };
