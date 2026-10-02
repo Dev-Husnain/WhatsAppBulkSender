@@ -8,12 +8,22 @@ async function interruptibleSleep(ms, shouldStop) {
   }
 }
 
+// Sends one contact's message and optional attachment (a whatsapp-web.js MessageMedia).
+// With caption on, the text goes under the file; otherwise the file and text are sent separately.
+async function sendOne(client, chatId, { message, media }, caption) {
+  const text = message.trim() ? message : '';
+  if (!media) return client.sendMessage(chatId, text);
+  if (caption && text) return client.sendMessage(chatId, media, { caption: text });
+  await client.sendMessage(chatId, media);
+  if (text) await client.sendMessage(chatId, text);
+}
+
 /**
  * Sends each contact its message, one at a time, with a random delay in between.
- * contacts: [{ number, message, valid? }]
+ * contacts: [{ number, message, media?, valid? }]
  * onEvent receives { type: 'progress' | 'waiting' | 'done', ... }
  */
-async function sendAll(client, contacts, { minDelay, maxDelay, log, onEvent = () => {}, shouldStop = () => false }) {
+async function sendAll(client, contacts, { minDelay, maxDelay, caption = true, log, onEvent = () => {}, shouldStop = () => false }) {
   const stats = { sent: 0, failed: 0, skipped: 0 };
   const total = contacts.length;
 
@@ -40,7 +50,7 @@ async function sendAll(client, contacts, { minDelay, maxDelay, log, onEvent = ()
       }
       // Newer WhatsApp Web versions renamed _serialized, so fall back to building the id
       const chatId = waId._serialized || waId.$1 || `${waId.user}@${waId.server}`;
-      await client.sendMessage(chatId, c.message);
+      await sendOne(client, chatId, c, caption);
       report('sent');
     } catch (err) {
       report('failed', err.message);

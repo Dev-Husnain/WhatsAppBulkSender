@@ -1,6 +1,8 @@
+const crypto = require('crypto');
 const path = require('path');
 const express = require('express');
 const QRCode = require('qrcode');
+const { MessageMedia } = require('whatsapp-web.js');
 const config = require('./config');
 const { buildClient } = require('./client');
 const { toContact, dedupe } = require('./contacts');
@@ -35,6 +37,16 @@ const SPEEDS = {
 
 const state = { status: 'starting', qr: null, me: null, error: null };
 const job = { running: false, stop: false, events: [] };
+
+// Attachments uploaded by the page, kept in memory until they are sent
+const MAX_UPLOAD_MB = 64;
+const UPLOAD_TTL_MS = 60 * 60 * 1000;
+const uploads = new Map(); // id -> { media, name, size, expires }
+
+function pruneUploads() {
+  const now = Date.now();
+  for (const [id, u] of uploads) if (u.expires < now) uploads.delete(id);
+}
 const listeners = new Set();
 let client;
 
@@ -123,7 +135,7 @@ app.use((req, res, next) => {
   }
   if (req.method === 'OPTIONS') {
     res.set('Access-Control-Allow-Methods', 'GET,POST');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, X-Filename');
     // Lets an https page (Netlify) reach this localhost server in Chrome
     res.set('Access-Control-Allow-Private-Network', 'true');
     return res.sendStatus(204);
@@ -151,17 +163,41 @@ app.get('/api/events', (req, res) => {
   req.on('close', () => listeners.delete(res));
 });
 
+// The page uploads each attachment once (raw body, name in X-Filename) and refers to it by id
+app.post('/api/upload', express.raw({ type: () => true, limit: `${MAX_UPLOAD_MB}mb` }), (req, res) => {
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: 'Empty file' });
+  pruneUploads();
+  const name = decodeURIComponent(req.get('X-Filename') || 'file').replace(/[\\/]/g, '_').slice(0, 200);
+  const type = req.get('Content-Type') || 'application/octet-stream';
+  const id = crypto.randomUUID();
+  uploads.set(id, {
+    media: new MessageMedia(type, req.body.toString('base64'), name, req.body.length),
+    name,
+    size: req.body.length,
+    expires: Date.now() + UPLOAD_TTL_MS,
+  });
+  res.json({ id, name, size: req.body.length });
+});
+
 app.post('/api/send', (req, res) => {
   if (state.status !== 'ready') return res.status(409).json({ error: 'WhatsApp is not connected yet' });
   if (job.running) return res.status(409).json({ error: 'Already sending' });
 
   const items = Array.isArray(req.body?.contacts) ? req.body.contacts : [];
+  const missing = items.find((c) => c?.file && !uploads.has(c.file));
+  if (missing) return res.status(400).json({ error: 'An attachment has expired. Please attach it again.' });
+
   const contacts = dedupe(
     items
-      .filter((c) => c && c.number && String(c.message || '').trim())
-      .map((c) => ({ ...toContact(c.number, config.defaultCountryCode), message: String(c.message) })),
+      .filter((c) => c && c.number && (String(c.message || '').trim() || c.file))
+      .map((c) => ({
+        ...toContact(c.number, config.defaultCountryCode),
+        message: String(c.message || ''),
+        media: c.file ? uploads.get(c.file).media : null,
+      })),
   );
-  if (contacts.length === 0) return res.status(400).json({ error: 'No contacts with a number and a message' });
+  if (contacts.length === 0) return res.status(400).json({ error: 'No contacts with a number and a message or file' });
+  const usedFiles = new Set(items.map((c) => c?.file).filter(Boolean));
 
   const [minDelay, maxDelay] = SPEEDS[req.body.speed] || SPEEDS.normal;
 
@@ -175,12 +211,16 @@ app.post('/api/send', (req, res) => {
   sendAll(client, contacts, {
     minDelay,
     maxDelay,
+    caption: req.body.caption !== false,
     log: createResultsLogger(config.resultsFile),
     shouldStop: () => job.stop,
     onEvent,
   })
     .catch((err) => onEvent({ type: 'done', error: err.message, stats: null }))
-    .finally(() => (job.running = false));
+    .finally(() => {
+      job.running = false;
+      usedFiles.forEach((id) => uploads.delete(id));
+    });
 
   res.json({ ok: true, total: contacts.length });
 });
@@ -199,6 +239,13 @@ app.post('/api/logout', async (req, res) => {
   }
   await restartWhatsApp('logged out');
   res.json({ ok: true });
+});
+
+// Send errors as JSON so the page can show them (e.g. a file over the size limit)
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  const tooLarge = err.type === 'entity.too.large';
+  res.status(err.status || 500).json({ error: tooLarge ? `File is too large (max ${MAX_UPLOAD_MB} MB)` : err.message });
 });
 
 app.listen(PORT, HOST, (err) => {

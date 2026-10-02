@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { select, input, confirm } = require('@inquirer/prompts');
 const config = require('./config');
 const { parseNumberList, loadNumbersFile, dedupe, fillTemplate } = require('./contacts');
@@ -84,11 +86,34 @@ async function askMessages(contacts) {
   return result;
 }
 
+// Optional attachment: a CSV "file" column (per number) and/or one file for everyone
+async function askAttachments(contacts) {
+  const fromFile = contacts.filter((c) => c.row.file).length;
+  if (fromFile) console.log(`${fromFile} row(s) have a file in the "file" column.`);
+
+  const answer = await input({
+    message: fromFile ? 'File for the other numbers (path, empty for none):' : 'Attach a file for everyone? (path, empty for none):',
+    validate: (value) => {
+      const p = unquote(value);
+      return !p || fs.existsSync(p) || `File not found: ${p}`;
+    },
+  });
+  const forEveryone = unquote(answer);
+
+  const result = contacts.map((c) => ({ ...c, filePath: c.row.file ? path.resolve(unquote(c.row.file)) : forEveryone && path.resolve(forEveryone) }));
+  const missing = [...new Set(result.map((c) => c.filePath).filter((p) => p && !fs.existsSync(p)))];
+  if (missing.length) throw new Error(`File(s) not found:\n  ${missing.join('\n  ')}`);
+  return result;
+}
+
+const unquote = (value) => String(value || '').trim().replace(/^"|"$/g, '');
+
 function printPreview(contacts) {
   console.log('\n--- Preview ---\n');
   contacts.forEach((c, i) => {
     const flag = c.valid ? '' : '  [INVALID NUMBER, will be skipped]';
     console.log(`${i + 1}. ${c.number}${flag}`);
+    if (c.filePath) console.log(`   [file] ${path.basename(c.filePath)}`);
     console.log(`   ${c.message.replace(/\n/g, '\n   ')}\n`);
   });
 }
@@ -121,6 +146,7 @@ async function main() {
   if (sender.signature) {
     contacts = contacts.map((c) => ({ ...c, message: `${c.message}\n\n— ${sender.name}` }));
   }
+  contacts = await askAttachments(contacts);
   printPreview(contacts);
 
   if (DRY_RUN) {
@@ -135,6 +161,13 @@ async function main() {
 
   // Loaded here so a dry run doesn't start WhatsApp at all
   const { startClient } = require('./client');
+  const { MessageMedia } = require('whatsapp-web.js');
+  const mediaCache = new Map();
+  contacts = contacts.map((c) => {
+    if (!c.filePath) return c;
+    if (!mediaCache.has(c.filePath)) mediaCache.set(c.filePath, MessageMedia.fromFilePath(c.filePath));
+    return { ...c, media: mediaCache.get(c.filePath) };
+  });
   console.log('\nStarting WhatsApp (headless)...');
   const client = await startClient();
   console.log('WhatsApp is ready.\n');
