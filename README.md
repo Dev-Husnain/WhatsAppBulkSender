@@ -124,6 +124,16 @@ Sending files in bulk looks more like spam than text, so prefer the **Normal** o
 
 Use **Log out** on the page to unlink WhatsApp from this computer.
 
+### Seeing your chats
+
+By default WhatsApp runs in the background with no window. Turn on **Show chats** at the top of the page to open
+your normal WhatsApp Web (chats, replies, media) in its own window. The first time, WhatsApp reconnects for a few
+seconds with your saved login (no new QR scan), so do it when nothing is sending. Turn the switch off to minimize
+the window; sending keeps working either way. The window is a separate browser with its own profile in
+`.wwebjs_auth/`, so your main Chrome, its tabs and its logins are never touched. Set `SHOW_WHATSAPP=true` in
+`.env` to have it open when the sender starts. Closing the window by hand makes the sender reconnect in the
+background, so use the switch instead.
+
 ## Using the terminal version
 
 ```bash
@@ -192,6 +202,7 @@ Settings live in `.env` (copy it from `.env.example`):
 | `ALLOWED_ORIGINS` | Netlify URL | Extra web pages allowed to use the sender, comma-separated |
 | `MAX_UPLOAD_MB` | `150` | Largest attachment in MB. The maximum is 190: WhatsApp allows up to 2 GB, but whatsapp-web.js passes files to the browser over a 256 MB channel. |
 | `PORT` | `3000` | Port for the sender. The page is then at `http://localhost:<PORT>`. |
+| `SHOW_WHATSAPP` | `false` | `true` opens the WhatsApp Web window (your chats) when the sender starts. With `false`, no window opens. The **Show chats** switch on the page shows or hides it at any time. `npm start -- --show` does the same for the terminal version. |
 
 ## Sending speed
 

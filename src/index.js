@@ -168,8 +168,8 @@ async function main() {
     if (!mediaCache.has(c.filePath)) mediaCache.set(c.filePath, MessageMedia.fromFilePath(c.filePath));
     return { ...c, media: mediaCache.get(c.filePath) };
   });
-  console.log('\nStarting WhatsApp (headless)...');
-  const client = await startClient();
+  console.log(config.showWhatsApp ? '\nStarting WhatsApp (window shown)...' : '\nStarting WhatsApp (headless)...');
+  const client = await startClient({ show: config.showWhatsApp });
   console.log('WhatsApp is ready.\n');
 
   let stopRequested = false;

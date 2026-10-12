@@ -4,7 +4,7 @@ const express = require('express');
 const QRCode = require('qrcode');
 const { MessageMedia } = require('whatsapp-web.js');
 const config = require('./config');
-const { buildClient } = require('./client');
+const { buildClient, setWindowVisible } = require('./client');
 const { toContact, dedupe } = require('./contacts');
 const { createResultsLogger } = require('./results');
 const { sendAll } = require('./sender');
@@ -32,7 +32,9 @@ const SPEEDS = {
 
 // ---------- WhatsApp connection state ----------
 
-const state = { status: 'starting', qr: null, me: null };
+// window: whether the WhatsApp Web window (your chats) is shown
+const state = { status: 'starting', qr: null, me: null, window: config.showWhatsApp };
+let hasWindow = false; // false while WhatsApp runs headless (no window to show)
 const job = { running: false, stop: false, events: [] };
 
 // Attachments uploaded by the page, kept in memory until they are sent
@@ -74,7 +76,20 @@ async function restartWhatsApp(reason) {
 }
 
 function startWhatsApp() {
-  const c = buildClient();
+  hasWindow = state.window;
+  const c = buildClient({
+    show: hasWindow,
+    onBrowser: () => {
+      // The switch may have been turned off while the browser was starting
+      c.pupPage.once('load', () => !state.window && setWindowVisible(c, false).catch(() => {}));
+      // Closing the WhatsApp window closes its browser, so start again with the window hidden
+      c.pupBrowser.once('disconnected', () => {
+        if (client !== c) return; // closed by a restart or shutdown
+        setState({ window: false });
+        restartWhatsApp('WhatsApp window was closed');
+      });
+    },
+  });
   client = c;
   const t0 = Date.now();
   const logEvent = (name, ...args) => console.log(`[wa +${((Date.now() - t0) / 1000).toFixed(1)}s] ${name}`, ...args);
@@ -207,6 +222,25 @@ app.post('/api/send', (req, res) => {
 app.post('/api/stop', (req, res) => {
   job.stop = true;
   res.json({ ok: true });
+});
+
+// Shows or hides the WhatsApp Web window. Hiding minimizes it, and sending keeps working.
+// Without a window (headless start) showing reconnects WhatsApp with one, using the saved login.
+app.post('/api/window', async (req, res) => {
+  const show = req.body?.show === true;
+  if (show && !hasWindow) {
+    if (job.running) return res.status(409).json({ error: 'Stop sending first, or wait until it finishes, to open your chats.' });
+    setState({ window: true });
+    restartWhatsApp('opening the WhatsApp window');
+    return res.json({ ok: true, window: true });
+  }
+  try {
+    if (client) await setWindowVisible(client, show);
+  } catch (err) {
+    return res.status(500).json({ error: `Could not ${show ? 'show' : 'hide'} the WhatsApp window: ${err.message}` });
+  }
+  setState({ window: show });
+  res.json({ ok: true, window: show });
 });
 
 app.post('/api/logout', async (req, res) => {

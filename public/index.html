@@ -202,6 +202,20 @@
   .preview-label { font-size: 12px; color: var(--muted); margin: 14px 0 0; }
   .notice { font-size: 13px; color: var(--muted); background: var(--warn-soft); border-radius: 12px; padding: 10px 14px; margin-top: 14px; }
   .notice b { color: var(--warn); }
+  .switch { display: inline-flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; user-select: none; }
+  .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .switch .track {
+    position: relative; width: 38px; height: 22px; border-radius: 999px; flex: none;
+    background: var(--border); transition: background .15s;
+  }
+  .switch .track::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s;
+  }
+  .switch input:checked + .track { background: var(--brand); }
+  .switch input:checked + .track::after { transform: translateX(16px); }
+  .switch input:focus-visible + .track { box-shadow: 0 0 0 4px var(--brand-soft); }
+  .switch input:disabled + .track { opacity: .5; }
   .hidden { display: none !important; }
   footer { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 28px; }
 
@@ -226,6 +240,11 @@
       <p class="subtitle">Message many WhatsApp numbers from your own PC</p>
     </div>
     <div class="spacer"></div>
+    <label id="chatsSwitch" class="switch hidden" title="Show or hide your WhatsApp chats in their own window (your main Chrome is not used).">
+      <input id="chatsToggle" type="checkbox" role="switch">
+      <span class="track"></span>
+      Show chats
+    </label>
     <span id="pill" class="pill wait"><span class="dot"></span><span id="pillText">Connecting…</span></span>
   </header>
 
@@ -728,11 +747,12 @@
       render();
     } catch {
       setStatus('offline');
+      setWindowSwitch({ status: 'offline' });
       return setTimeout(connect, 3000);
     }
     source = new EventSource(server + '/api/events');
     source.onmessage = (e) => handleEvent(JSON.parse(e.data));
-    source.onerror = () => { source.close(); setStatus('offline'); setTimeout(connect, 3000); };
+    source.onerror = () => { source.close(); setStatus('offline'); setWindowSwitch({ status: 'offline' }); setTimeout(connect, 3000); };
   }
 
   // ---------- sending ----------
@@ -763,8 +783,30 @@
       (counts.skipped ? `<span class="chip">${counts.skipped} skipped</span>` : '');
   }
 
+  // ---------- WhatsApp window (your chats) ----------
+  // Older senders don't send "window", so the switch stays hidden for them
+  function setWindowSwitch(e) {
+    const supported = typeof e.window === 'boolean' && e.status !== 'offline';
+    $('chatsSwitch').classList.toggle('hidden', !supported);
+    if (supported) $('chatsToggle').checked = e.window;
+  }
+
+  $('chatsToggle').onchange = async () => {
+    const show = $('chatsToggle').checked;
+    $('chatsToggle').disabled = true;
+    try {
+      await api('/api/window', { show });
+    } catch (err) {
+      $('chatsToggle').checked = !show;
+      alert(err.message);
+    } finally {
+      $('chatsToggle').disabled = false;
+    }
+  };
+
   function handleEvent(e) {
     if (e.type === 'status') {
+      setWindowSwitch(e);
       if (e.qr) $('qrImg').src = e.qr;
       return setStatus(e.status, e.me);
     }

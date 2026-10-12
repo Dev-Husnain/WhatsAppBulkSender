@@ -1,13 +1,17 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 
-// A headless WhatsApp Web client. The login is saved in .wwebjs_auth/ and reused,
+// A WhatsApp Web client. The login is saved in .wwebjs_auth/ and reused,
 // so the QR code only has to be scanned once.
-function buildClient() {
-  return new Client({
-    authStrategy: new LocalAuth(),
+// show: open a real WhatsApp Web window (your chats) instead of running headless.
+// setWindowVisible() can then minimize and restore it.
+function buildClient({ show = false, onBrowser } = {}) {
+  const authStrategy = new LocalAuth();
+  const client = new Client({
+    authStrategy,
     puppeteer: {
-      headless: true,
+      headless: !show,
+      defaultViewport: null, // let the page fill the window
       // Skip Chrome features WhatsApp Web doesn't need, so it starts faster
       args: [
         '--no-sandbox',
@@ -17,9 +21,35 @@ function buildClient() {
         '--disable-dev-shm-usage',
         '--no-first-run',
         '--no-default-browser-check',
+        // Keep WhatsApp running at full speed while the window is minimized
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
       ],
     },
   });
+
+  // Runs right after the browser opens, before WhatsApp Web loads
+  const afterBrowser = authStrategy.afterBrowserInitialized.bind(authStrategy);
+  authStrategy.afterBrowserInitialized = async () => {
+    await afterBrowser();
+    onBrowser?.(client);
+  };
+  return client;
+}
+
+// Shows (restores and focuses) or hides (minimizes) the WhatsApp Web window
+async function setWindowVisible(client, visible) {
+  const page = client.pupPage;
+  if (!page) return;
+  const session = await page.createCDPSession();
+  try {
+    const { windowId } = await session.send('Browser.getWindowForTarget');
+    await session.send('Browser.setWindowBounds', { windowId, bounds: { windowState: visible ? 'normal' : 'minimized' } });
+    if (visible) await page.bringToFront();
+  } finally {
+    await session.detach().catch(() => {});
+  }
 }
 
 // After the first QR scan, "ready" sometimes never fires. The login is saved by then,
@@ -27,8 +57,8 @@ function buildClient() {
 const READY_TIMEOUT_MS = 30 * 1000;
 
 // Terminal version: prints the QR code in the console and resolves when ready.
-function startClient(attempt = 1) {
-  const client = buildClient();
+function startClient({ show = false } = {}, attempt = 1) {
+  const client = buildClient({ show });
 
   return new Promise((resolve, reject) => {
     let readyTimer;
@@ -44,7 +74,7 @@ function startClient(attempt = 1) {
         console.log('Still not ready, restarting WhatsApp...');
         client.removeAllListeners();
         await client.destroy().catch(() => {});
-        startClient(attempt + 1).then(resolve, reject);
+        startClient({ show }, attempt + 1).then(resolve, reject);
       }, READY_TIMEOUT_MS);
     });
     client.on('auth_failure', (msg) => reject(new Error(`Authentication failed: ${msg}`)));
@@ -56,4 +86,4 @@ function startClient(attempt = 1) {
   });
 }
 
-module.exports = { buildClient, startClient };
+module.exports = { buildClient, setWindowVisible, startClient };

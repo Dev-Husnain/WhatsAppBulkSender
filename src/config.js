@@ -10,6 +10,8 @@ const config = {
   maxUploadMb: Math.min(Number(process.env.MAX_UPLOAD_MB || 150), 190),
   contactsFile: process.env.CONTACTS_FILE || 'contacts.csv',
   resultsFile: process.env.RESULTS_FILE || 'results.csv',
+  // Show the WhatsApp Web window (chats) when starting. The --show flag does the same.
+  showWhatsApp: process.argv.includes('--show') || /^(1|true|yes|on)$/i.test(process.env.SHOW_WHATSAPP || ''),
 };
 
 if (config.minDelay > config.maxDelay) {
